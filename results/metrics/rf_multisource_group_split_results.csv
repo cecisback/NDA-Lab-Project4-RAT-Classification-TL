@@ -1,0 +1,5 @@
+combination,n_samples,n_features,n_train,n_test,accuracy,precision_weighted,recall_weighted,f1_weighted
+ping,30,11,21,9,0.5556,0.4762,0.5556,0.4593
+ping+throughput,23,22,15,8,0.875,0.8125,0.875,0.8333
+ping+power,23,29,15,8,0.75,0.75,0.75,0.75
+ping+throughput+power,18,41,12,6,0.6667,0.4722,0.6667,0.5444

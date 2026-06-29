@@ -1,0 +1,5 @@
+z,n_features,accuracy,precision_weighted,recall_weighted,f1_weighted,train_groups,test_groups
+1,12,0.2245,0.222,0.2245,0.219,9,3
+3,12,0.2307,0.238,0.2307,0.2281,9,3
+5,12,0.2334,0.2393,0.2334,0.2307,9,3
+10,12,0.2244,0.2074,0.2244,0.2091,9,3

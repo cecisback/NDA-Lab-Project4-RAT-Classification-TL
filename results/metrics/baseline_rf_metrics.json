@@ -1,0 +1,59 @@
+{
+  "input_file": "/Users/alessia00/NDA-Lab-Project4-RAT-Classification-TL/data/raw/figure5_packet_loss.csv",
+  "n_samples": 95016,
+  "feature_columns": [
+    "icmp_seq",
+    "ttl",
+    "rtt_ms"
+  ],
+  "test_size": 0.25,
+  "random_state": 42,
+  "accuracy": 0.696,
+  "precision_weighted": 0.6897,
+  "recall_weighted": 0.696,
+  "f1_weighted": 0.6921,
+  "confusion_matrix": [
+    [
+      5827,
+      722,
+      241,
+      819,
+      692
+    ],
+    [
+      981,
+      795,
+      31,
+      135,
+      158
+    ],
+    [
+      300,
+      14,
+      4591,
+      433,
+      12
+    ],
+    [
+      1169,
+      178,
+      508,
+      1603,
+      72
+    ],
+    [
+      530,
+      160,
+      9,
+      57,
+      3717
+    ]
+  ],
+  "class_labels": [
+    "0",
+    "2",
+    "7",
+    "8",
+    "9"
+  ]
+}
