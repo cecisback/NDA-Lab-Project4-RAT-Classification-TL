@@ -3,8 +3,6 @@ Baseline Random Forest classifier for RAT classification.
 Uses a single measurement file with numeric measurement features only.
 No time-window feature extraction, no neural network, no transfer learning.
 """
-import sys
-sys.path.append("..")
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
@@ -14,15 +12,17 @@ from sklearn.metrics import (
                             f1_score, 
                             confusion_matrix
                             )
-from src.config import (path_list, 
-                        EXCLUDED_COLS, 
-                        TARGET_COL)
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import json
 import os
+
+import sys
+sys.path.append("..")
+from src.config import (path_list, 
+                        EXCLUDED_COLS, 
+                        TARGET_COL)
 
 INPUT_FILE = os.path.join(path_list["DATASET_DIR"], "figure5_packet_loss.csv")
 

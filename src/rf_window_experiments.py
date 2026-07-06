@@ -2,9 +2,6 @@
 Random Forest experiments across different time-window lengths z.
 Trains and evaluates a model for each z, saves results and figures.
 """
-import sys
-sys.path.append("..")
-
 import os
 import json
 import pandas as pd
@@ -13,17 +10,21 @@ import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-)
-from src.window_features import compute_window_features
-from src.config import TARGET_COL, path_list, SORT_COLS
-from src.preprocessing import (
-    load_raw, select_measurement_cols
-)
+                            accuracy_score, 
+                            precision_score, 
+                            recall_score, 
+                            f1_score, 
+                            confusion_matrix
+                            )
 
-RAW_DIR = "data/raw"
-RESULTS_METRICS = "results/metrics"
-RESULTS_FIGURES = "results/figures"
+import sys
+sys.path.append("..")
+
+from src.preprocessing import select_measurement_cols
+from src.window_features import compute_window_features
+from src.utils import load_raw
+from src.config import (TARGET_COL, path_list)
+
 INPUT_FILE = os.path.join(path_list["DATASET_DIR"], "figure5_packet_loss.csv")
 
 Z_VALUES = [1, 3, 5, 10]
@@ -59,10 +60,9 @@ def train_evaluate(X, y, z):
         "feature_importances": dict(zip(X.columns, clf.feature_importances_.tolist())),
     }
 
-
 def main():
-    os.makedirs(RESULTS_METRICS, exist_ok=True)
-    os.makedirs(RESULTS_FIGURES, exist_ok=True)
+    os.makedirs(path_list["RESULTS_METRICS"], exist_ok=True)
+    os.makedirs(path_list["RESULTS_FIGURES"], exist_ok=True)
 
     df = load_raw(INPUT_FILE)
     print(f"Loaded: {INPUT_FILE}  ({df.shape[0]:,} rows)")
@@ -99,6 +99,7 @@ def main():
         "recall_weighted": r["recall_weighted"],
         "f1_weighted": r["f1_weighted"],
     } for r in all_results])
+    
     csv_path = os.path.join(path_list["RESULTS_METRICS"], "rf_window_results.csv")
     results_df.to_csv(csv_path, index=False)
     print(f"\nSaved: {csv_path}")
@@ -153,7 +154,6 @@ def main():
 
     print(f"\n--- Summary ---")
     print(results_df.to_string(index=False))
-
 
 if __name__ == "__main__":
     main()

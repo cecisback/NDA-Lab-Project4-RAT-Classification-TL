@@ -2,19 +2,22 @@
 Shared evaluation utilities for RAT classification.
 Used by RF, NN, and TL pipelines — no dependency on preprocessing.
 """
-import os
-import numpy as np
-import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report
 from sklearn.metrics import (
-    confusion_matrix,
-    accuracy_score,
-    precision_score,
-    f1_score,
-    recall_score,
-)
+                        confusion_matrix,
+                        accuracy_score,
+                        precision_score,
+                        f1_score,
+                        recall_score,
+                        )
+import matplotlib.pyplot as plt
+import numpy as np
 import sys
+import os
+
 sys.path.append("..")
 from src.config import path_list
+from src.utils import store_json_content
 
 def evaluate_dataset(X, y):
     """Return basic dataset statistics as a dict."""
@@ -33,15 +36,96 @@ def evaluate_dataset(X, y):
         "Class distribution": y.value_counts().sort_index().to_string(),
     }
 
+def compute_classification_report(X_test, y_test, model, target, labels):
+    y_pred = model.predict(X_test)
+    
+    classification_analysis = classification_report(y_test, y_pred, target_names=target, labels=labels)
+
+    return classification_analysis
+
+def compute_statistics(outcome_training_per_z, RAT_NAME):
+    accuracy_scores = []
+
+    for _, outcome_training in outcome_training_per_z.iterrows():
+        accuracy, global_precision, global_recall, global_f1score = performance_eval(outcome_training["features_set"], 
+                                                                                     outcome_training["y_test"], 
+                                                                                     outcome_training["y_pred"], 
+                                                                                     outcome_training["extracted_labels"],
+                                                                                     RAT_NAME, 
+                                                                                     outcome_training["z_value"], 
+                                                                                     outcome_training["model_name"])
+        accuracy_scores.append(accuracy)
+
+        print("------------------------------------\n")
+        print("Results for Z: {}\n".format(outcome_training["z_value"]))
+        print("Training time[s]: {}\n".format(outcome_training["training_time"]))
+        print("Accuracy: {}\n".format(accuracy))
+        print("Global precision: {}\n".format(global_precision))
+        print("Global recall: {}\n".format(global_recall))
+        print("Global f1score: {}\n".format(global_f1score))
+        print("------------------------------------\n")
+    return accuracy_scores
+
+def draw_cm(cm, labels, z_value, model_name, normalized):
+    cm_png_filename = ""
+    title = ""
+    root_path = ""
+
+    root_path = path_list["RF_FIGURES"] if model_name == "RandomForest" else path_list["NN_FIGURES"] 
+
+    if normalized:
+        title = "Normalized confusion matrix"
+    else:
+        title = "Confusion matrix"
+
+    fig_n, ax_n = plt.subplots()
+    im = ax_n.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
+    ax_n.figure.colorbar(im, ax=ax_n)
+    ax_n.set(
+        xticks=np.arange(cm.shape[1]),
+        yticks=np.arange(cm.shape[0]),
+        xticklabels=labels,
+        yticklabels=labels,
+        title=title,
+        ylabel="True label",
+        xlabel="Predicted label",
+    )
+    fmt_n = ".2f"
+    thresh_n = cm.max() / 2.0
+    for w in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax_n.text(
+                j,
+                w,
+                format(cm[w, j], fmt_n),
+                ha="center",
+                va="center",
+                color="white" if cm[w, j] > thresh_n else "black",
+            )
+    fig_n.tight_layout()
+
+    if normalized:
+        cm_png_filename = "classification_NN_conf_matrix_{}_normalized.png".format(z_value)
+    else:
+        cm_png_filename = "classification_NN_conf_matrix_{}.png".format(z_value)
+
+    fig_n.savefig(os.path.join(root_path, cm_png_filename))
+    plt.close(fig_n)
+
 def performance_eval(
     X,
     y_true,
     y_pred,
-    lab,
-    l_names,
-    results_dir= path_list["RESULTS_METRICS"],
-    figures_dir=path_list["RESULTS_FIGURES"],
+    lab: list,
+    l_names: list,
+    z_value: int,
+    model_name: str
 ):
+    
+    os.makedirs(path_list["RESULTS_METRICS"], exist_ok=True)
+    os.makedirs(path_list["NN_FIGURES"], exist_ok=True)
+    os.makedirs(path_list["RF_FIGURES"], exist_ok=True)
+
     """Full evaluation with metrics dict, saved report, and confusion matrix plots."""
     ds_eval = evaluate_dataset(X, y_true)
 
@@ -56,97 +140,27 @@ def performance_eval(
     cm_norm = confusion_matrix(y_true, y_pred, labels=lab, normalize="true")
 
     results = {
+        "z_value": z_value,
+        "model_name": model_name,
         "dataset_samples": ds_eval["Samples"],
         "dataset_features": ds_eval["Features"],
         "dataset_classes": ds_eval["Classes"],
         "dataset_class_distribution": ds_eval["Class distribution"],
         "accuracy": accuracy,
-        "precision": precision,
+        "precision": list(precision),
         "global_precision": global_precision,
-        "recall": recall,
+        "recall": list(recall),
         "global_recall": global_recall,
-        "f1score": f1score,
+        "f1score": list(f1score),
         "global_f1score": global_f1score,
     }
 
-    os.makedirs(results_dir, exist_ok=True)
-    os.makedirs(figures_dir, exist_ok=True)
+    # To store performance evaluation metrics
+    results_path = os.path.join(path_list["RESULTS_METRICS"], "performance_eval_results.json")
 
-    results_path = os.path.join(results_dir, "performance_eval_results.txt")
-    with open(results_path, "a") as f:
-        f.write("---------------------------------\n")
-        f.write("OUTCOME PERFORMANCE EVALUATION\n")
-        f.write(f"Dataset samples: {results["dataset_samples"]}\n")
-        f.write(f"Dataset features: {results["dataset_features"]}\n")
-        f.write(f"Dataset classes: {results["dataset_classes"]}\n")
-        f.write(f"Dataset class distribution: {results["dataset_class_distribution"]}\n")
-        f.write(f"Accuracy: {results["accuracy"]}\n")
-        f.write(f"Precision: {results["precision"]}\n")
-        f.write(f"Global precision: {results["global_precision"]}\n")
-        f.write(f"Recall: {results["recall"]}\n")
-        f.write(f"Global recall: {results["global_recall"]}\n")
-        f.write(f"F1score: {results["f1score"]}\n")
-        f.write(f"Global F1score: {results["global_f1score"]}\n")
-        f.write("---------------------------------\n")
+    draw_cm(cm, l_names, z_value, model_name, False)
+    draw_cm(cm_norm, l_names, z_value, model_name, True)
 
-    # Confusion matrix
-    title = "Confusion matrix"
-    fig, ax = plt.subplots()
-    im = ax.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
-    ax.figure.colorbar(im, ax=ax)
-    ax.set(
-        xticks=np.arange(cm.shape[1]),
-        yticks=np.arange(cm.shape[0]),
-        xticklabels=l_names,
-        yticklabels=l_names,
-        title=title,
-        ylabel="True label",
-        xlabel="Predicted label",
-    )
-    fmt = "d"
-    thresh = cm.max() / 2.0
-    for w in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax.text(
-                j,
-                w,
-                format(cm[w, j], fmt),
-                ha="center",
-                va="center",
-                color="white" if cm[w, j] > thresh else "black",
-            )
-    fig.tight_layout()
-    fig.savefig(os.path.join(figures_dir, "classification_NN_conf_matrix.png"))
-    plt.close(fig)
-
-    # Normalized confusion matrix
-    title_norm = "Normalized confusion matrix"
-    fig_n, ax_n = plt.subplots()
-    im = ax_n.imshow(cm_norm, interpolation="nearest", cmap=plt.cm.Blues)
-    ax_n.figure.colorbar(im, ax=ax_n)
-    ax_n.set(
-        xticks=np.arange(cm_norm.shape[1]),
-        yticks=np.arange(cm_norm.shape[0]),
-        xticklabels=l_names,
-        yticklabels=l_names,
-        title=title_norm,
-        ylabel="True label",
-        xlabel="Predicted label",
-    )
-    fmt_n = ".2f"
-    thresh_n = cm_norm.max() / 2.0
-    for w in range(cm_norm.shape[0]):
-        for j in range(cm_norm.shape[1]):
-            ax_n.text(
-                j,
-                w,
-                format(cm_norm[w, j], fmt_n),
-                ha="center",
-                va="center",
-                color="white" if cm_norm[w, j] > thresh_n else "black",
-            )
-    fig_n.tight_layout()
-    fig_n.savefig(os.path.join(figures_dir, "classification_NN_conf_matrix_normalized.png"))
-    plt.close(fig_n)
+    store_json_content(results_path, results)
 
     return accuracy, global_precision, global_recall, global_f1score

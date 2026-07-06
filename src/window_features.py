@@ -3,11 +3,12 @@ Time-window feature extraction for RAT classification.
 Computes rolling-window statistics (mean, std, min, max) for measurement
 columns within groups sorted by timestamp.
 """
-import sys
-sys.path.append("..")
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+
+import sys
+sys.path.append("..")
 from src.config import (GROUP_COLS, SORT_COLS)
 
 """
@@ -26,7 +27,7 @@ To compute statistic measurements on aggregated features.
 Given the selected_X dataframe in input, corresponding to the set of rows extracted from a window of size z,
 the following function extracts aggregated information from each group of data.
 """
-def compute_statistics(selected_X: pd.DataFrame, measurement_cols) -> pd.DataFrame:
+def compute_aggregated_data(selected_X: pd.DataFrame, measurement_cols) -> pd.DataFrame:
     processed_file_content = selected_X.groupby(GROUP_COLS)[measurement_cols].agg(["min","max","std","mean"]).fillna(0.0)
     return modified_multilevel_col(processed_file_content)
 
@@ -39,14 +40,14 @@ def compute_windowed_dataset(dataset: pd.DataFrame, z_value: int, measurement_co
         while first_value + z_value <= len(dataset):
             last_value = first_value + z_value
             selected_window = dataset.iloc[first_value:last_value,:]
-            windowed_dataset = pd.concat([windowed_dataset, compute_statistics(selected_window, measurement_cols)])
+            windowed_dataset = pd.concat([windowed_dataset, compute_aggregated_data(selected_window, measurement_cols)])
             first_value = last_value
             last_value += z_value
             pbar.update(z_value)
 
         if first_value < len(dataset):
             selected_window = dataset.iloc[first_value:,:]
-            windowed_dataset = pd.concat([windowed_dataset, compute_statistics(selected_window, measurement_cols)])
+            windowed_dataset = pd.concat([windowed_dataset, compute_aggregated_data(selected_window, measurement_cols)])
             pbar.update(z_value)
     return windowed_dataset
 
@@ -66,7 +67,8 @@ def compute_window_features(
     engineered feature columns (target not included).
     """
     features_dataset = df.copy()
-    features_dataset = features_dataset.sort_values(SORT_COLS).reset_index(drop=True)
+    SORTED_COL = [col for col in df.columns if any(value in col for value in SORT_COLS)]
+    features_dataset = features_dataset.sort_values(SORTED_COL).reset_index(drop=True)
 
     feature_frames = []
 
@@ -74,16 +76,16 @@ def compute_window_features(
         for _, grp in features_dataset.groupby(GROUP_COLS, sort=False):
             grp_features = pd.DataFrame(index=grp.index)
 
-            #for col in measurement_cols:
-            #    series = grp[col]
-            #    roll = series.rolling(window=z, min_periods=1)
+            for col in measurement_cols:
+                series = grp[col]
+                roll = series.rolling(window=z, min_periods=1)
 
-            #    grp_features[f"{col}_mean"] = roll.mean().values
-            #    grp_features[f"{col}_std"] = roll.std().values
-            #    grp_features[f"{col}_min"] = roll.min().values
-            #    grp_features[f"{col}_max"] = roll.max().values
+                grp_features[f"{col}_mean"] = roll.mean().values
+                grp_features[f"{col}_std"] = roll.std().values
+                grp_features[f"{col}_min"] = roll.min().values
+                grp_features[f"{col}_max"] = roll.max().values
 
-            common_info = [col for col in grp_features.columns if col not in measurement_cols]
+            common_info = [col for col in grp.columns if col not in measurement_cols]
             grp_features = pd.concat([grp_features,features_dataset[common_info]], axis=1)
 
             feature_frames.append(grp_features)

@@ -6,29 +6,23 @@ time-window feature extraction into a single callable pipeline.
 
 v1: single-source (figure5_packet_loss.csv only).
 """
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
+import numpy as np
+import math as m
+import os
+
 import sys
 sys.path.append("..")
-from sklearn.preprocessing import LabelEncoder
+
 from src.data_inspection import list_raw_files
+from src.utils import load_raw, store_json_content
 from src.config import (path_list, 
                         NODE_INFO_COLS,
                         EXCLUDED_COLS, 
                         SOURCE_LABELS,
                         NUMERICAL_COL
                         )
-import pandas as pd
-import numpy as np
-import math as m
-import os
-
-# ---- I/O ----
-
-def load_raw(filepath: str) -> pd.DataFrame:
-    """Read a raw measurement CSV and ensure timestamp is numeric."""
-    df = pd.read_csv(filepath)
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-    return df
 
 # ---- Column utilities ----
 
@@ -60,8 +54,8 @@ def rename_columns(df: pd.DataFrame, source_label: str) -> pd.DataFrame:
 
     df = df.rename(columns=mapping)
 
-    # Append source suffix to measurement columns (not node_info, metadata,
-    # or temporal ordering columns like timestamp / timetamp_ms)
+    # Append source suffix to measurement columns (not node_info or columns such as operatore_anon
+    # dropped to fulfill the project requirements)
     RENAME_SKIP = set(NODE_INFO_COLS) | {"operator_anon"}
     renamed = {}
     for col in df.columns:
@@ -113,17 +107,17 @@ def nan_analysis(df: pd.DataFrame) -> tuple:
 def save_nan_analysis(analysis_df: pd.DataFrame, output_dir: str = path_list["ANALYSIS_DIR"]):
     """Persist NaN analysis results to disk."""
     os.makedirs(output_dir, exist_ok=True)
-    path = os.path.join(output_dir, "nan_analysis.txt")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("-----------------------------------\n")
-        f.write("         NaN VALUES ANALYSIS       \n")
-        f.write("-----------------------------------\n\n")
-        for _, row in analysis_df.iterrows():
-            f.write(f"Column name: {row["name_col"]}\n")
-            f.write(f"Total row: {row["tot_row"]}\n")
-            f.write(f"Information lost: {row["info_lost"]}\n")
-            f.write(f"Valid information: {row["valid_info"]}\n")
-            f.write(f"Percentage loss: {row["percentage_loss"]}\n\n")
+    path = os.path.join(output_dir, "nan_analysis.json")
+
+    for _, row in analysis_df.iterrows():
+        new_data = {
+            "column_name": row["name_col"],
+            "tot_row": row["tot_row"],
+            "lost_info": row["info_lost"],
+            "valid_info": row["valid_info"],
+            "percentage_loss": row["percentage_loss"]
+        }
+        store_json_content(path, new_data)
 
         print("nan values analysis stored in {}\n".format(path))
 
@@ -133,7 +127,7 @@ def select_measurement_cols(df: pd.DataFrame) -> list:
     """Return numeric measurement columns with variance, excluding metadata."""
     cols = []
     for c in df.columns:
-        if c in EXCLUDED_COLS:
+        if any(col in c for col in EXCLUDED_COLS):
             continue
         if not pd.api.types.is_numeric_dtype(df[c]):
             continue
@@ -165,8 +159,7 @@ def compute_info_node():
         meta_df = pd.concat([meta_df,df[available_meta].copy()], ignore_index=True)
 
         # Drop NODE_INFO_COLS and keep just non metadata 
-        drop_meta = NODE_INFO_COLS.copy()
-        drop_meta.remove("id")
+        drop_meta = [c for c in available_meta if c != "id"]
         df = df.drop(columns=drop_meta, errors="ignore")
         
     meta_df = meta_df.drop("operator_anon", axis=1)

@@ -1,0 +1,57 @@
+[
+   {
+      "window_size": [
+         5000
+      ],
+      "windowed_dataset_size": [
+         40
+      ],
+      "windowed_dataset_length": [
+         10453
+      ],
+      "windowed_dataset_columns": [
+         [
+            "run",
+            "node_name",
+            "location",
+            "modem_name",
+            "mcc",
+            "country",
+            "iso_code",
+            "rat",
+            "tot_size_throughput_min",
+            "tot_size_throughput_max",
+            "tot_size_throughput_std",
+            "tot_size_throughput_mean",
+            "avg_speed_throughput_min",
+            "avg_speed_throughput_max",
+            "avg_speed_throughput_std",
+            "avg_speed_throughput_mean",
+            "tot_time_throughput_min",
+            "tot_time_throughput_max",
+            "tot_time_throughput_std",
+            "tot_time_throughput_mean",
+            "filesize_throughput_min",
+            "filesize_throughput_max",
+            "filesize_throughput_std",
+            "filesize_throughput_mean",
+            "direction_throughput_min",
+            "direction_throughput_max",
+            "direction_throughput_std",
+            "direction_throughput_mean",
+            "tot_size_current_min",
+            "tot_size_current_max",
+            "tot_size_current_std",
+            "tot_size_current_mean",
+            "avg_speed_current_min",
+            "avg_speed_current_max",
+            "avg_speed_current_std",
+            "avg_speed_current_mean",
+            "tot_time_current_min",
+            "tot_time_current_max",
+            "tot_time_current_std",
+            "tot_time_current_mean"
+         ]
+      ]
+   }
+]

@@ -6,8 +6,8 @@ and joins them into a single feature matrix.
 import pandas as pd
 import numpy as np
 import sys
-sys.path.append("..")
 
+sys.path.append("..")
 from src.config import(
                         GROUP_COLS,
                         TARGET_COL,

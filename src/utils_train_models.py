@@ -1,26 +1,29 @@
 """
-For training and evaluating the MLPClassifier
+For training and evaluating the RandomForest and MPLClassifier
 """
+from sklearn.model_selection import GroupShuffleSplit
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+import numpy as np
+import joblib
+import json
+import time
+import os
+
 import sys
 sys.path.append("..")
 
 from src.window_features import compute_windowed_dataset
 from src.preprocessing import (select_measurement_cols, 
                                build_single_source_pipeline)
-from src.utils_eval import performance_eval
-from src.config import GROUP_COLS, SORT_COLS, path_list
+from src.utils_eval import compute_classification_report
+from src.utils import store_json_content
+from src.config import (GROUP_COLS, SORT_COLS, path_list)
 
-from sklearn.model_selection import GroupShuffleSplit, train_test_split
-from sklearn.metrics import classification_report
-from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import StandardScaler
-import pandas as pd
-import numpy as np
-import joblib
-import time
-import os
 
-Z = [5000,10000,20000]
+Z = [1000,5000,10000,50000,100000,500000]
 RANDOM_STATE = 42
 TEST_SIZE = 0.25
 
@@ -30,7 +33,7 @@ NUM_ITER= 200
 NEURONS = 5
 LAYERS = 2
 
-Z_WINDOW_EVAL_OUTCOME = "outcome_windowed_features.txt"
+NUM_ESTIMATORS = 100
 
 def train_NN_classifier(X_tr, y_tr, activ, neur, lyrs, solv_name, num_iter):
     print("Training a NN...")
@@ -49,6 +52,19 @@ def train_NN_classifier(X_tr, y_tr, activ, neur, lyrs, solv_name, num_iter):
     
     return model, training_time
 
+def train_RandomForest(X_train, y_train):
+    print("Training a RandomForest classifier...")
+
+    start_training = time.time()
+    clf = RandomForestClassifier(
+                                n_estimators=NUM_ESTIMATORS, 
+                                random_state=RANDOM_STATE, n_jobs=-1)
+    clf.fit(X_train, y_train)
+    end_training = time.time()
+
+    training_time = end_training - start_training
+
+    return clf, training_time
 
 def load_preprocessed_dataset():
     # To create the ../data/outcome_preprocess directory
@@ -72,37 +88,37 @@ def load_preprocessed_dataset():
 
     return dataset
 
-def compute_classification_report(X_test, y_test, model, target, labels):
-    y_pred = model.predict(X_test)
-    
-    classification_analysis = classification_report(y_test, y_pred, target_names=target, labels=labels)
-
-    return classification_analysis
-
 def generate_grouped_dataset(dataset):
     LIST_COL = [col for col in dataset if any(value in col for value in SORT_COLS)]
-    dataset = dataset.sort_values(by=LIST_COL, axis=1, ascending=True)
+    dataset = dataset.sort_values(by=LIST_COL, ascending=True)
+    print("Dataset was sorted by timestamps: {}\n".format(LIST_COL))
     groups = dataset.groupby(GROUP_COLS)
+    encoded_groups = [i for i in range(len(groups))]
 
     group_list = pd.DataFrame()
-    for _, index in groups:
-        group_list = pd.concat([group_list, index], ignore_index=True)
-    encoded_groups = [i for i in range(len(group_list))]
-    group_list["encode"] = encoded_groups
+    for index, (group_key, group_content) in enumerate(groups):
+        new_value = np.full(len(group_content),encoded_groups[index])
+        group_content["encoded"] = new_value
+        group_list = pd.concat([group_list, group_content], ignore_index=True)
 
-    group_encoded = pd.merge(dataset, group_list, how="inner")["encode"].to_numpy()
-    return group_encoded
+    print('Number of encoded groups: {}\n'.format(len(groups)))
+    return group_list["encoded"]
 
-def generate_outcome_classification(windowed_dataset, split_outcome, z, labels, target):
+def generate_outcome_classification(windowed_dataset, split_outcome, z, labels, target, model_name):
     features_set = windowed_dataset.copy()
+    model, training_time = None, 0
 
-    model, training_time = train_NN_classifier(split_outcome["X_train"], split_outcome["y_train"], ACTIVATION, NEURONS, LAYERS, SOLVER, NUM_ITER)
+    if model_name == "MLPClassifier":
+        model, training_time = train_NN_classifier(split_outcome["X_train"], split_outcome["y_train"], ACTIVATION, NEURONS, LAYERS, SOLVER, NUM_ITER)
+    elif model_name == "RandomForest":
+        model, training_time = train_RandomForest(split_outcome["X_train"], split_outcome["y_train"])
     y_pred = model.predict(split_outcome["X_test"])
 
     classification_report = compute_classification_report(split_outcome["X_test"], split_outcome["y_test"], model, target, labels)
 
     outcome_training = {
                 "z_value": [z],
+                "model_name": [model_name],
                 "features_set": [features_set],
                 "pretrained_model": [model],
                 "training_time": [training_time],
@@ -132,95 +148,73 @@ We proposed two distinct ways to generate the windowed dataset:
                               windowed dataset generation will affect the system performance.
 """
 
-def generate_X_features__models_per_z(dataset: pd.DataFrame, target: list, model: str = "MLPClassifier"):
+def generate_outcome_training_per_z(dataset: pd.DataFrame, target: list, model: str):
     # Select measurement columns
     measurement_cols = select_measurement_cols(dataset)
     print(f"Measurement columns ({len(measurement_cols)}): {measurement_cols}")
 
     outcome_training_per_z = pd.DataFrame()
-    
+        
     group_encoded = generate_grouped_dataset(dataset)
+    print('Generation of the windowed dataset was ultimated')
 
     for z in Z:
         windowed_dataset = pd.DataFrame()
-        
+            
         gss = GroupShuffleSplit(n_splits=1, test_size=TEST_SIZE, random_state=RANDOM_STATE)
         for i, (train_index, test_index) in enumerate(gss.split(dataset, None, group_encoded)):
-            print("Fold={}\n".format(i))
-            print("Train group={}\n".format(group_encoded[train_index]))
-            print("Test group={}\n".format(group_encoded[test_index]))
-
+            
             train_set = dataset.iloc[train_index]
             test_set = dataset.iloc[test_index]
 
             print("Train dataset length: {}, test dataset length: {} obtained for Z: {}".format(len(train_set),len(test_set), z))
-            windowed_dataset_train = compute_windowed_dataset(train_set, z, measurement_cols)
-            windowed_dataset_test = compute_windowed_dataset(test_set, z, measurement_cols)
-            windowed_dataset = pd.concat([windowed_dataset_train,windowed_dataset_test], axis=0, ignore_index=True)
-            
+            X_train = compute_windowed_dataset(train_set, z, measurement_cols)
+            X_test = compute_windowed_dataset(test_set, z, measurement_cols)
+            windowed_dataset = pd.concat([X_train, X_test], axis=0, ignore_index=True)
+                
             print("Windowed dataset computed for z = {}\n".format(z))
             print("Length dataset: {}\n".format(len(windowed_dataset)))
             
-            X = windowed_dataset.copy()
-            y = X["rat"].copy()
-            X.drop("rat", axis=1, inplace=True)
+            labels = np.unique(windowed_dataset["rat"])
 
-            labels = np.unique(y)
-
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=RANDOM_STATE)
+            y_train = X_train["rat"].copy()
+            y_test = X_test["rat"].copy()
+            X_train.drop("rat", axis=1, inplace=True)
+            X_test.drop("rat", axis=1, inplace=True)
 
             scaler = StandardScaler()
-            X_train = scaler.fit_transform(X_train)
-            X_test = scaler.fit(X_test)
+            X_train_norm = scaler.fit_transform(X_train)
+            X_test_norm = scaler.transform(X_test)
 
             split_outcome = {
-                "X_train": X_train.copy(),
-                "X_test": X_test.copy(),
-                "y_train": y_train.copy(),
-                "y_test": y_test.copy(),
+                "X_train": X_train_norm,
+                "X_test": X_test_norm,
+                "y_train": y_train,
+                "y_test": y_test,
             }
-
-            outcome_training = generate_outcome_classification(windowed_dataset, split_outcome, z, labels, target)
+            outcome_training = generate_outcome_classification(windowed_dataset, split_outcome, z, labels, target, model)
             outcome_training_per_z = pd.concat([outcome_training_per_z, pd.DataFrame(outcome_training)], ignore_index=True)
 
     return outcome_training_per_z
 
-def compute_statistics(outcome_training_per_z, RAT_NAME):
-    accuracy_scores = []
+def store_windowed_training_analysis(outcome_windowed_dataset_eval, model_name):
+    os.makedirs(path_list["ANALYSIS_DIR"], exist_ok=True)
+    os.makedirs(path_list["EXPORTED_DIR"], exist_ok=True)
 
-    for _, outcome_training in outcome_training_per_z.iterrows():
-        accuracy, global_precision, global_recall, global_f1score  = performance_eval(outcome_training["features_set"], outcome_training["y_test"], outcome_training["y_pred"], outcome_training["extracted_labels"], RAT_NAME)
-        accuracy_scores.append(accuracy)
+    filename = path_list["Z_WINDOW_EVAL_NN"] if model_name == "MLPClassifier" else path_list["Z_WINDOW_EVAL_RF"]
 
-        print("------------------------------------\n")
-        print("Results for Z: {}\n".format(outcome_training["z_value"]))
-        print("Training time[s]: {}\n".format(outcome_training["training_time"]))
-        print("Accuracy: {}\n".format(accuracy))
-        print("Global precision: {}\n".format(global_precision))
-        print("Global recall: {}\n".format(global_recall))
-        print("Global f1score: {}\n".format(global_f1score))
-        print("------------------------------------\n")
-    return accuracy_scores
-
-def store_windowed_training_analysis(outcome_windowed_dataset_eval):
-    EXPORTED_DIR = "results/exported"
-    MODEL_NAME = "MLPClassifier"
-    EXPORTED_DIR = "results/exported"
-    MODEL_NAME = "MLPClassifier"
-
-    with open(os.path.join(path_list["ANALYSIS_DIR"], Z_WINDOW_EVAL_OUTCOME),"w") as f:
-        f.write("--------------------------------------------------------------------------\n")
-        f.write("MOST ACCURATE WINDOWED MODEL\n")
-        f.write("Window size:{}\n".format(outcome_windowed_dataset_eval["window_size"]))
-        f.write("Pretrained model:{}\n".format(outcome_windowed_dataset_eval["selected_model"]))
-        f.write("Windowed dataset length:{}\n".format(len(outcome_windowed_dataset_eval["windowed_dataset"])))
-        f.write("--------------------------------------------------------------------------\n")
-
-    if not os.path.exists(path_list["EXPORTED_DIR"]):
-        os.makedirs(path_list["EXPORTED_DIR"])
+    new_data = {
+        "window_size": [int(outcome_windowed_dataset_eval["window_size"])],
+        "windowed_dataset_size": [int(outcome_windowed_dataset_eval["windowed_dataset"].shape[1])],
+        "windowed_dataset_length": [int(outcome_windowed_dataset_eval["windowed_dataset"].shape[0])],
+        "windowed_dataset_columns": [outcome_windowed_dataset_eval["windowed_dataset"].columns.to_list()]
+    }
+    store_json_content(os.path.join(path_list["ANALYSIS_DIR"],filename), new_data)
     
+    label = "_"+("NN" if model_name == "MLPClassifier" else "RF")
+
     # To store the selected windowed dataset
-    outcome_windowed_dataset_eval["windowed_dataset"].to_csv(path_list["EXPORTED_FEATURES_PATH"], index=False)
+    outcome_windowed_dataset_eval["windowed_dataset"].to_csv(os.path.join(path_list["EXPORTED_FEATURES_PATH"],label), index=False)
     
     # To store the selected model in pkl format
-    joblib.dump(outcome_windowed_dataset_eval["selected_model"], os.path.join(EXPORTED_DIR,MODEL_NAME)+".pkl")
+    joblib.dump(outcome_windowed_dataset_eval["selected_model"], os.path.join(path_list["EXPORTED_DIR"],model_name)+".pkl")

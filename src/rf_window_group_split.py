@@ -3,14 +3,7 @@ Random Forest window-feature evaluation with group-aware splitting.
 Uses GroupShuffleSplit so that rows from the same run never appear
 in both train and test, preventing leakage through rolling windows.
 """
-import sys
-sys.path.append('..')
-from src.window_features import compute_window_features
-from src.preprocessing import (
-                            load_raw, 
-                            select_measurement_cols,
-                            upload_csv_files
-                            )
+
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
@@ -31,6 +24,12 @@ import seaborn as sns
 import pandas as pd
 import json
 import os
+
+import sys
+sys.path.append('..')
+from src.window_features import compute_window_features
+from src.utils import(load_raw, upload_csv_files)
+from src.preprocessing import select_measurement_cols
 
 RESULTS_METRICS = "results/metrics"
 RESULTS_FIGURES = "results/figures"

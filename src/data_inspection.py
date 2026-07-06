@@ -9,6 +9,8 @@ import pandas as pd
 from zipfile import ZipFile
 
 sys.path.append("..")
+from src.config import path_list
+from src.utils import upload_csv_files
 
 SAMPLE_ROWS = 10_000
 LARGE_FILE_THRESHOLD_MB = 100
@@ -29,17 +31,11 @@ SEMANTIC_GROUPS = {
     "power_energy": ["voltage", "current", "diff"],
 }
 
-from src.config import path_list
-
 def classify_column(col: str) -> str:
     for group, members in SEMANTIC_GROUPS.items():
         if col in members:
             return group
     return "other"
-
-def upload_csv_files() -> pd.DataFrame:
-    with ZipFile(path_list["CSV_FILES"],"r") as zDataset:
-        zDataset.extractall(path=path_list["DATASET_DIR"])
 
 def list_raw_files():  
     if not os.path.exists(path_list['DATASET_DIR']):

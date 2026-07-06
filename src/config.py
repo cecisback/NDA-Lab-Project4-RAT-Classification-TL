@@ -42,7 +42,9 @@ SOURCE_LABELS = {
 }
 
 # ---- List of columns required for grouping and sorting the windowed dataset ----
-GROUP_COLS = [col for col in NODE_INFO_COLS if col not in ["rat_name","operator_anon"]]
+GROUP_COLS = [ "run", "node_name", "location", "modem_name",
+                "mcc", "country", "iso_code", "rat"
+            ]
 SORT_COLS = ["timestamp", "timestamp_ms"]
 
 path_list = {
@@ -57,4 +59,11 @@ path_list = {
     "EXPORTED_FEATURES_PATH": os.path.join(PROJECT_ROOT,"results/exported/aggregated_features.csv"),
     "NODE_INFO_FILE": os.path.join(PROJECT_ROOT,"data/node_info.csv"),
     "ONNX_NN_MODEL": os.path.join(PROJECT_ROOT,"exported_NN_ONNX.jpg"),
+    "ENCODED_DATASET": os.path.join(PROJECT_ROOT,"data/outcome_preprocess/encoded.csv"),
+    "NN_FIGURES": os.path.join(PROJECT_ROOT,"results/figures/classification_NN"),
+    "Z_WINDOW_EVAL_NN": "outcome_windowed_features_NN.json",
+    "Z_WINDOW_EVAL_RF": "outcome_windowed_features_RF.json",
+    "RF_FIGURES": os.path.join(PROJECT_ROOT,"results/figures/classification_RF"),
+    "EVAL_METRICS": os.path.join(PROJECT_ROOT, "results/metrics/performance_eval_results.json"),
+    "METRIC_EVAL_FIG": os.path.join(PROJECT_ROOT,"results/figures/metric_eval/")
 }
