@@ -2,7 +2,7 @@
 Shared evaluation utilities for RAT classification.
 Used by RF, NN, and TL pipelines — no dependency on preprocessing.
 """
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, mean_absolute_error, mean_squared_error
 from sklearn.metrics import (
                         confusion_matrix,
                         accuracy_score,
@@ -11,16 +11,16 @@ from sklearn.metrics import (
                         recall_score,
                         )
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
-import sys
 import os
 
-sys.path.append("..")
-from src.config import path_list
+from src.config import path_nested_folders, path_files, path_main_folders
 from src.utils import store_json_content
 
 def evaluate_dataset(X, y):
     """Return basic dataset statistics as a dict."""
+
     n_samples = len(X)
     n_classes = y.nunique()
 
@@ -47,10 +47,10 @@ def compute_statistics(outcome_training_per_z, RAT_NAME):
     accuracy_scores = []
 
     for _, outcome_training in outcome_training_per_z.iterrows():
-        accuracy, global_precision, global_recall, global_f1score = performance_eval(outcome_training["features_set"], 
-                                                                                     outcome_training["y_test"], 
-                                                                                     outcome_training["y_pred"], 
-                                                                                     outcome_training["extracted_labels"],
+        accuracy, global_precision, global_recall, global_f1score = performance_eval(outcome_training["features_set"].copy(), 
+                                                                                     outcome_training["y_test"].copy(), 
+                                                                                     outcome_training["y_pred"].copy(), 
+                                                                                     outcome_training["extracted_labels"].copy(),
                                                                                      RAT_NAME, 
                                                                                      outcome_training["z_value"], 
                                                                                      outcome_training["model_name"])
@@ -66,12 +66,17 @@ def compute_statistics(outcome_training_per_z, RAT_NAME):
         print("------------------------------------\n")
     return accuracy_scores
 
+# To draw both confusion matrix and confusion matrix normalized of notebooks "RF" and "NN"
+# otherwise we should rearrange the root_path
 def draw_cm(cm, labels, z_value, model_name, normalized):
     cm_png_filename = ""
     title = ""
     root_path = ""
+    id_model = "RF" if model_name == "RandomForest" else "NN"
 
-    root_path = path_list["RF_FIGURES"] if model_name == "RandomForest" else path_list["NN_FIGURES"] 
+    root_path = path_nested_folders["RF_FIGURES"] if model_name == "RandomForest" else path_nested_folders["NN_FIGURES"] 
+
+    os.makedirs(root_path, exist_ok=True)
 
     if normalized:
         title = "Normalized confusion matrix"
@@ -105,26 +110,22 @@ def draw_cm(cm, labels, z_value, model_name, normalized):
     fig_n.tight_layout()
 
     if normalized:
-        cm_png_filename = "classification_NN_conf_matrix_{}_normalized.png".format(z_value)
+        cm_png_filename = "classification_{}_conf_matrix_{}_normalized.png".format(id_model,z_value)
     else:
-        cm_png_filename = "classification_NN_conf_matrix_{}.png".format(z_value)
+        cm_png_filename = "classification_{}_conf_matrix_{}.png".format(id_model,z_value)
 
     fig_n.savefig(os.path.join(root_path, cm_png_filename))
     plt.close(fig_n)
 
 def performance_eval(
     X,
-    y_true,
+    y_true: pd.DataFrame,
     y_pred,
     lab: list,
     l_names: list,
     z_value: int,
     model_name: str
 ):
-    
-    os.makedirs(path_list["RESULTS_METRICS"], exist_ok=True)
-    os.makedirs(path_list["NN_FIGURES"], exist_ok=True)
-    os.makedirs(path_list["RF_FIGURES"], exist_ok=True)
 
     """Full evaluation with metrics dict, saved report, and confusion matrix plots."""
     ds_eval = evaluate_dataset(X, y_true)
@@ -138,14 +139,15 @@ def performance_eval(
     global_f1score = f1_score(y_true, y_pred, labels=lab, average="weighted", zero_division=0)
     cm = confusion_matrix(y_true, y_pred, labels=lab, normalize=None)
     cm_norm = confusion_matrix(y_true, y_pred, labels=lab, normalize="true")
+    mse_error = mean_squared_error(y_true, y_pred, sample_weight=None, multioutput='uniform_average')
+    mae_error = mean_absolute_error(y_true, y_pred, sample_weight=None, multioutput='uniform_average')
 
     results = {
         "z_value": z_value,
         "model_name": model_name,
         "dataset_samples": ds_eval["Samples"],
-        "dataset_features": ds_eval["Features"],
-        "dataset_classes": ds_eval["Classes"],
-        "dataset_class_distribution": ds_eval["Class distribution"],
+        "dataset_features": int(ds_eval["Features"]),
+        "dataset_classes": int(ds_eval["Classes"].iloc[0]),
         "accuracy": accuracy,
         "precision": list(precision),
         "global_precision": global_precision,
@@ -153,10 +155,14 @@ def performance_eval(
         "global_recall": global_recall,
         "f1score": list(f1score),
         "global_f1score": global_f1score,
+        "mse_error": mse_error,
+        "mae_error": mae_error
     }
 
+
     # To store performance evaluation metrics
-    results_path = os.path.join(path_list["RESULTS_METRICS"], "performance_eval_results.json")
+    results_path = path_files["EVAL_METRICS"]
+    os.makedirs(path_main_folders["RESULT_METRICS"], exist_ok=True)
 
     draw_cm(cm, l_names, z_value, model_name, False)
     draw_cm(cm_norm, l_names, z_value, model_name, True)

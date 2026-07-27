@@ -8,20 +8,69 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
 import joblib
-import json
 import time
 import os
-
-import sys
-sys.path.append("..")
 
 from src.window_features import compute_windowed_dataset
 from src.preprocessing import (select_measurement_cols, 
                                build_single_source_pipeline)
 from src.utils_eval import compute_classification_report
 from src.utils import store_json_content
-from src.config import (GROUP_COLS, SORT_COLS, path_list)
+from src.config import (GROUP_COLS, SORT_COLS, path_main_folders, path_files)
 
+# According to the project specifications, RAT classification must be performed with two distinct ML models:
+#- *Random Forest classifier*, relies on a *decision tree structure*, takes the outcome produced by each node
+#  of a given level and merges it with results obtained in corresponding nodes of subsequent levels. 
+#  *All final predictions* are stored in leaf nodes and are summed up to obtain the *last prediction*. 
+#- *Multi-Layer Perceptron*, is a *feed-forward Neural Network* with an architecture slightly more complex 
+#  than the previous model. 
+# The MLP classifier is a network composed of neurons called *perceptrons*, whose number and size can be 
+# setted while creating the model.
+
+# Training a ML model usually implies the following steps:
+# - evaluation of the dataset in input to determine the best way for extracting training and testing sets.
+#   Our purpose is still *reducing* as much as possible the *training time* while preserving the *model stability*
+#   and *accuracy* and *reaching convergence*;
+# - splitting the *target class* (Radio Access Technology code) from the windowed dataset;
+# - extraction of the training and testset by splitting the original dataset in two distinct subsets.
+#   The shape of the windowed dataset in input should suggest the size of the training set to be extracted.
+#   Usually, it is a good practice to consider a smaller percentage of the overall content of the windowed dataset 
+#   as training set and the remaining 60%/80% of data as the testing set;
+# - training of the classifier and performance evaluation;
+# - comparison of the accuracy of both models through *MSE*, *MAE*, *Mean Absolute Percentage Error*, *Root Mean 
+#   Square Error* and *R2* Prediction Accuracy;
+
+# We evaluated two distinct ways for splitting the dataset in training and testing set.
+# The first one takes in input the feature set, the target class and a *percentage value* to compute the size of
+# the testset from the size of the overall feature set.
+# The second method relies on *group-aware splitting* and reflects the group distinction previously computed in the 
+# windowed dataset. 
+# An important difference between these methods is noticeable in the fact that the second one:
+# -  extracts *groups from the windowed dataset* using grouped attributes previously defined;
+# -  splits the feature set and the corresponding labelled targets according to the group IDs found and the percentage 
+#    of learning rate specified as testset size;
+# - preserves the amount of aggregated data for each group;
+# In other words, all elements belonging to a given group, which was assigned to a specific set (either training or 
+# testing set), must be located in the same set.
+
+# This can be useful to *preserve the amount of meaningful data* within the training and testing sets compared to the 
+# informational content of the original windowed one. 
+# A metric to quantify the *feature importance* within a dataset is known as *correlation*. 
+# We should ensure that, for each feature, the percentage of correlated data won't be affected heavily by the dataset 
+# splitting process, otherwise they cannot be used for training the ML model.
+
+# We introduced the *early_stopping* parameter in the MLPClassifier model to ensure *convergence even in case of overfitting*.
+# This will reduce the *training time* when the model is stuck training, but no improvements are recorded.
+ 
+# The final step of the ML training process consists on *performance evaluation*.
+# We decided to introduce the following parameters:
+# - *accuracy*, which quantifies the number of correct predictions with respect to the total number of predictions made;
+# - *precision*, fraction of the number of true positives predictions with respect to all predictions (both correctly and
+#    uncorrectly) classified as positives;
+# - *f1 score*, is the harmoning mean of precision and recall;
+#   In our scenario is the most accurate metric to evaluate the system performance due to the highly unbalanced dataset.
+# - *recall*, fraction of true positive predictions with respect to all actual predictions made that should have been 
+#   classified as positives;
 
 Z = [1000,5000,10000,50000,100000,500000]
 RANDOM_STATE = 42
@@ -46,6 +95,7 @@ def train_NN_classifier(X_tr, y_tr, activ, neur, lyrs, solv_name, num_iter):
                         activation=activ,
                         solver=solv_name,
                         max_iter=num_iter)
+    
     model.fit(X_tr, y_tr)
     end_training = time.time()
     training_time = end_training - start_training
@@ -68,10 +118,10 @@ def train_RandomForest(X_train, y_train):
 
 def load_preprocessed_dataset():
     # To create the ../data/outcome_preprocess directory
-    if not os.path.exists(path_list["FEATURES_DATASET_DIR"]):
-        os.makedirs(path_list["FEATURES_DATASET_DIR"])
+    if not os.path.exists(path_main_folders["FEATURES_DATASET_DIR"]):
+        os.makedirs(path_main_folders["FEATURES_DATASET_DIR"])
 
-    filepath = os.path.join(path_list["FEATURES_DATASET_DIR"],path_list["FEATURES_DATASET_FILEPATH"])
+    filepath = path_files["FEATURES_DATASET"]
 
     dataset = pd.DataFrame()
     
@@ -177,8 +227,8 @@ def generate_outcome_training_per_z(dataset: pd.DataFrame, target: list, model: 
             
             labels = np.unique(windowed_dataset["rat"])
 
-            y_train = X_train["rat"].copy()
-            y_test = X_test["rat"].copy()
+            y_train = X_train["rat"]
+            y_test = X_test["rat"]
             X_train.drop("rat", axis=1, inplace=True)
             X_test.drop("rat", axis=1, inplace=True)
 
@@ -187,21 +237,22 @@ def generate_outcome_training_per_z(dataset: pd.DataFrame, target: list, model: 
             X_test_norm = scaler.transform(X_test)
 
             split_outcome = {
-                "X_train": X_train_norm,
-                "X_test": X_test_norm,
-                "y_train": y_train,
-                "y_test": y_test,
+                "X_train": pd.DataFrame(X_train_norm),
+                "X_test": pd.DataFrame(X_test_norm),
+                "y_train": pd.DataFrame(y_train),
+                "y_test": pd.DataFrame(y_test),
             }
             outcome_training = generate_outcome_classification(windowed_dataset, split_outcome, z, labels, target, model)
             outcome_training_per_z = pd.concat([outcome_training_per_z, pd.DataFrame(outcome_training)], ignore_index=True)
 
     return outcome_training_per_z
 
-def store_windowed_training_analysis(outcome_windowed_dataset_eval, model_name):
-    os.makedirs(path_list["ANALYSIS_DIR"], exist_ok=True)
-    os.makedirs(path_list["EXPORTED_DIR"], exist_ok=True)
 
-    filename = path_list["Z_WINDOW_EVAL_NN"] if model_name == "MLPClassifier" else path_list["Z_WINDOW_EVAL_RF"]
+def store_windowed_training_analysis(outcome_windowed_dataset_eval, model_name):
+    os.makedirs(path_main_folders["ANALYSIS_DIR"], exist_ok=True)
+    os.makedirs(path_main_folders["EXPORTED_DIR"], exist_ok=True)
+    
+    filename = path_files["Z_WINDOW_EVAL_NN"] if model_name == "MLPClassifier" else path_files["Z_WINDOW_EVAL_RF"]
 
     new_data = {
         "window_size": [int(outcome_windowed_dataset_eval["window_size"])],
@@ -209,12 +260,15 @@ def store_windowed_training_analysis(outcome_windowed_dataset_eval, model_name):
         "windowed_dataset_length": [int(outcome_windowed_dataset_eval["windowed_dataset"].shape[0])],
         "windowed_dataset_columns": [outcome_windowed_dataset_eval["windowed_dataset"].columns.to_list()]
     }
-    store_json_content(os.path.join(path_list["ANALYSIS_DIR"],filename), new_data)
+
+    store_json_content(filename, new_data)
     
     label = "_"+("NN" if model_name == "MLPClassifier" else "RF")
 
     # To store the selected windowed dataset
-    outcome_windowed_dataset_eval["windowed_dataset"].to_csv(os.path.join(path_list["EXPORTED_FEATURES_PATH"],label), index=False)
+    filename = os.path.join(path_main_folders["EXPORTED_DIR"],"aggregated_features{}.csv".format(label))
+
+    outcome_windowed_dataset_eval["windowed_dataset"].to_csv(filename, index=False)
     
     # To store the selected model in pkl format
-    joblib.dump(outcome_windowed_dataset_eval["selected_model"], os.path.join(path_list["EXPORTED_DIR"],model_name)+".pkl")
+    joblib.dump(outcome_windowed_dataset_eval["selected_model"], os.path.join(path_main_folders["EXPORTED_DIR"],model_name)+".pkl")

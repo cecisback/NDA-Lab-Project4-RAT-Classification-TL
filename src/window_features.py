@@ -1,102 +1,41 @@
-"""
-Time-window feature extraction for RAT classification.
-Computes rolling-window statistics (mean, std, min, max) for measurement
-columns within groups sorted by timestamp.
-"""
 import pandas as pd
-import numpy as np
 from tqdm import tqdm
 
-import sys
-sys.path.append("..")
 from src.config import (GROUP_COLS, SORT_COLS)
 
-"""
-To flatten multiindex columns obtained with attributes aggregation in compute_statistics().
+# The following function takes in input an aggregated dataset with a multilevel index.
+# Then, it takes all values of the selected column indexes on all of its levels and
+# it concatenates those strings with an underscore to obtain the final value of the column index.
+def modified_multilevel_col(df):
+    df.columns = [
+        "_".join(str(part) for part in col if str(part)).strip("_")
+        for col in df.columns.values
+    ]
+    return df.reset_index()
 
-For each column and each of their indexes, we retrieve the corresponding values 
-(eg. tot_size_throughput and min) and we concatenate them with the _ character as separator.
-Then, we generate a new list of columns.
-"""
-def modified_multilevel_col(processed_dataset: pd.DataFrame) -> pd.DataFrame:
-    processed_dataset.columns = ["_".join(col).strip() for col in processed_dataset.columns.values]
-    return processed_dataset.reset_index()
+def compute_windowed_dataset(dataset, z_value, measurement_cols):
+    if z_value <= 0:
+        raise ValueError("z_value must be a positive integer")
 
-"""
-To compute statistic measurements on aggregated features.
-Given the selected_X dataframe in input, corresponding to the set of rows extracted from a window of size z,
-the following function extracts aggregated information from each group of data.
-"""
-def compute_aggregated_data(selected_X: pd.DataFrame, measurement_cols) -> pd.DataFrame:
-    processed_file_content = selected_X.groupby(GROUP_COLS)[measurement_cols].agg(["min","max","std","mean"]).fillna(0.0)
-    return modified_multilevel_col(processed_file_content)
+    cols = [col for col in measurement_cols if col in dataset.columns]
+    sort_cols = [col for col in SORT_COLS if col in dataset.columns]
+    group_cols = [col for col in GROUP_COLS if col in dataset.columns]
+    ordered = dataset.sort_values(by=sort_cols, axis=1, ascending=True)
 
-def compute_windowed_dataset(dataset: pd.DataFrame, z_value: int, measurement_cols) -> pd.DataFrame:
-    windowed_dataset = pd.DataFrame()
-    last_value = z_value
-    first_value = 0
+    windowed_dataset = []
 
-    with tqdm(total = len(dataset), colour="green") as pbar:
-        while first_value + z_value <= len(dataset):
-            last_value = first_value + z_value
-            selected_window = dataset.iloc[first_value:last_value,:]
-            windowed_dataset = pd.concat([windowed_dataset, compute_aggregated_data(selected_window, measurement_cols)])
-            first_value = last_value
-            last_value += z_value
-            pbar.update(z_value)
+    with tqdm(total=len(ordered), colour="green") as bar:
+        start = 0
+        while start < len(ordered):
+            window = ordered.iloc[start : start + z_value]
+            grouped_window = window.groupby(group_cols)[cols].agg(["min","max","std","mean"])
+            aggregated_window = modified_multilevel_col(grouped_window)
+            aggregated_window = aggregated_window.fillna(0.0)
+            windowed_dataset.append(aggregated_window)
+            start = start + z_value
+            bar.update(len(window))
 
-        if first_value < len(dataset):
-            selected_window = dataset.iloc[first_value:,:]
-            windowed_dataset = pd.concat([windowed_dataset, compute_aggregated_data(selected_window, measurement_cols)])
-            pbar.update(z_value)
-    return windowed_dataset
+    if not windowed_dataset:
+        raise RuntimeError("Some errors occurred while computing the windowed dataset")
 
-def compute_window_features(
-    df: pd.DataFrame,
-    measurement_cols: list,
-    z: int,
-) -> pd.DataFrame:
-    """
-    Compute rolling-window statistics for each measurement column.
-
-    For each group defined by GROUP_COLS, rows are sorted by timestamp.
-    A rolling window of size `z` (expanding for the first z-1 rows)
-    computes mean, std, min, max.
-
-    Returns a DataFrame with the same index as df containing only the
-    engineered feature columns (target not included).
-    """
-    features_dataset = df.copy()
-    SORTED_COL = [col for col in df.columns if any(value in col for value in SORT_COLS)]
-    features_dataset = features_dataset.sort_values(SORTED_COL).reset_index(drop=True)
-
-    feature_frames = []
-
-    with tqdm(total = len(features_dataset), colour="green") as pbar:
-        for _, grp in features_dataset.groupby(GROUP_COLS, sort=False):
-            grp_features = pd.DataFrame(index=grp.index)
-
-            for col in measurement_cols:
-                series = grp[col]
-                roll = series.rolling(window=z, min_periods=1)
-
-                grp_features[f"{col}_mean"] = roll.mean().values
-                grp_features[f"{col}_std"] = roll.std().values
-                grp_features[f"{col}_min"] = roll.min().values
-                grp_features[f"{col}_max"] = roll.max().values
-
-            common_info = [col for col in grp.columns if col not in measurement_cols]
-            grp_features = pd.concat([grp_features,features_dataset[common_info]], axis=1)
-
-            feature_frames.append(grp_features)
-            pbar.update(1)
-
-    features = pd.concat(feature_frames)
-
-    # Reorder to match df index order
-    features = features.loc[features_dataset.index]
-
-    # Fill NaN std values (occurs when z=1 or window has 1 row)
-    features = features.fillna(0.0)
-
-    return features
+    return pd.concat(windowed_dataset, ignore_index=True).fillna(0.0)

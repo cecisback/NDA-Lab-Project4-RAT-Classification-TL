@@ -1,13 +1,26 @@
 # Project 4: What Network Am I Using? RAT Classification with Transfer Learning
+This project was realized for the course of Network Measurements and Data Analysis at Polimi in 2026.
 
-Classify the Radio Access Technology (RAT) using mobile network measurement data.
+Even if it was thought to be a project group and we managed together every aspect of the project development, I decided to keep and publish in this repository only files and folders that were strictly written by me.
+
+I decided to unify the core functionalities implemented in the Python files located in the src folder in these notebooks, since I think that this is the most efficient way to evaluate the outcome of each step of the classification pipeline. 
+The purpose of the project is performing *RAT classification* to predict the network to which the mobile phone is attached even in case of obfuscation. In the project specifications, it is said that the network indicator isn't visible due to dead pixel cluster.
+
+Traffic classification, in our context, is applied to a specific scenario.
+The first step that should be performed is *traffic capture* to retrieve measurement data. 
+The most known way, easily accessible to all computer devices, to intercept packets across the network relies on *passive observation*.
+*Active measurement techniques*, instead, are useful for retrieving insights about the physical and logical path followed by a given packet to reach its destination and coming back to its sender.
+In the most complex scenarios and with a strong knowledge of protocols that enable communication over Wireless networks, *Wifi sniffing* is greedily ammissible too. 
 
 ## Dataset
+Our project relies on a *dataset* extracted from a research paper focused on evaluating *QoS metrics* across *multiple RATs in four different countries*.  
 
-The dataset contains crowdsourced mobile network measurements from multiple countries.
+By comparing the given dataset with the ones seen during the evaluation labs, where measurement data were captured with the methods mentioned above, I noticed that the measurement parameters taken into account should reflect:
+- the purpose of the traffic capture;
+- the network in which data are forwarded;
+- the way in which the intended device handles communications over the network;
 
-- **DOI**: [10.5281/zenodo.15420422](https://doi.org/10.5281/zenodo.15420422)
-- Download and place raw CSV files under `data/raw/`.
+Due to these criteria, RSS and SSID, which are highly informative in a wireless network, become meaningless in a wired one, since this latter doesn't rely on access points for packets forwarding and interconnection of devices across the network, but rather on routing protocols (such as OSPF and BGP) and on parameters, like TTL and hop count, for traffic analysis purposes.
 
 ## Project Structure
 
@@ -19,8 +32,6 @@ The dataset contains crowdsourced mobile network measurements from multiple coun
 | - data/
 	| - analysis/
 		| - nan_analysis.txt
-		| - outcome_windowed_features_NN.json
-		| - outcome_windowed_features_RF.json
 	| - outcome_preprocess/
 		| - encoded.csv
 		| - feature_dataset.csv
@@ -29,21 +40,22 @@ The dataset contains crowdsourced mobile network measurements from multiple coun
 		| - *.csv
 		| - README.md
 	| - node_info.csv
-| - notebooks/                                               Jupyter notebooks for exploration & visualisation
+| - notebooks/                                            Jupyter notebooks for exploration & visualisation
 	| - .gitkeep
-	| - 01_RandomForest_RAT_classification.ipynb
-	| - 02_RandomForest_baseline.ipynb
-	| - 03_window_feature_experiments.ipynb
-	| - 04_multisource_rf_experiments.ipynb
-	| - 05_NN_RAT_classification.ipynb
-	| - 06_outcome_visualization.ipynb
+	| - RandomForest_baseline.ipynb
+	| - NN_RAT_classification.ipynb
+	| - Outcome_visualization.ipynb
 | - results/
 	| - exported/
-		| - aggregated_features.csv
+		| - aggregated_features_NN.csv
+		| - aggregated_features_RF.csv
 		| - MLPClassifier.onnx
 		| - MLPClassifier.pkl
 		| - MLPClassifier.png
-	| - figures/                                             Plots and graphics
+		| - outcome_windowed_features_NN.json
+		| - outcome_windowed_features_RF.json
+	| - figures/          
+		| - .gitkeep                                           Plots and graphics
 		| - classification_NN/
 			| - classification_NN_conf_matrix_{z_value}_normalized.png
 			| - classification_NN_conf_matrix_{z_value}.png
@@ -52,59 +64,16 @@ The dataset contains crowdsourced mobile network measurements from multiple coun
 			| - classification_NN_conf_matrix_{z_value}.png
 		| - metric_eval
 			| - {metric}_vs_z.png
-		| - .gitkeep
-		| - baseline_rf_confusion_matrix.png
-		| - rf_multisource_group_split_confusion_matrix.png
-		| - rf_window_group_split_accuracy_f1.png
-		| - rf_window_accuracy_vs_z.png 
-		| - rf_window_group_split_confusion_matrix_best.png
-		| - rf_window_accuracy_vs_z.png  
-		| - rf_window_best_confusion_matrix.png
 	| - metrics/                                             Evaluation metrics (CSV / JSON)
 		| - .gitkeep
-		| - baseline_rf_metrics.json
-		| - project_status_audit.md 
-		| - rf_performance_eval_results.txt
-		| - rf_window_results.csv
-		| - data_structure_summary.md
-		| - rf_multisource_group_split_results.csv
-		| - rf_window_group_split_results.csv
-		| - rf_window_results.json
-		| - performance_eval_results.json 
-		| - rf_multisource_group_split_results.json 
-		| - rf_window_group_split_results.json
-	| - slides/                                              Final presentation materials
+		| -	performance_eval_results.json
 	| - src/                                        Python source modules (preprocessing, features, models, utils)
 		| - __init__.py
-		| - utils.py
-		| - data_inspection.py
-		| - rf_multisource_experiments.py   
+		| - utils.py 
 		| - utils_eval.py
-		| - baseline_random_forest.py
-		| - multisource_features.py
-		| - rf_window_experiments.py
 		| - utils_train_models.py
 		| - config.py
 		| - preprocessing.py
-		| - rf_window_group_split.py 
 		| - window_features.py
-```
-
-## Main Tasks
-
-1. Dataset understanding & exploration
-2. Data preprocessing
-3. Feature extraction with different time-window lengths *z*
-4. Random Forest baseline
-5. Neural Network model
-6. Model comparison
-7. Transfer Learning across countries
-8. Final slides and results
-
-## Setup
-
-```bash
-python -m venv .venv
-source .venv/Scripts/activate   # Windows
-pip install -r requirements.txt
+		| - config.py
 ```
