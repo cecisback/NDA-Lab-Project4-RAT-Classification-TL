@@ -4,7 +4,7 @@
          1000
       ],
       "windowed_dataset_size": [
-         40
+         36
       ],
       "windowed_dataset_length": [
          51381
@@ -19,10 +19,6 @@
             "country",
             "iso_code",
             "rat",
-            "id_min",
-            "id_max",
-            "id_std",
-            "id_mean",
             "tot_size_throughput_min",
             "tot_size_throughput_max",
             "tot_size_throughput_std",

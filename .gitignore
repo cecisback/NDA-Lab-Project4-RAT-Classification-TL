@@ -217,15 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 # NDA Lab project specific
+src/
+*pycache.*
+
 data/raw/
-data/processed/
-*.zip
-*.pkl
-*.joblib
-*.pt
-*.pth
-*.h5
+README.md
 .DS_Store
-notebooks/data/outcome_preprocess/feature_dataset.csv
-notebooks/data/outcome_preprocess/encoded_dataset.csv
-notebooks/data/outcome_preprocess/encoded_dataset.csv

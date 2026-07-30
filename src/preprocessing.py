@@ -210,11 +210,13 @@ def select_measurement_cols(df: pd.DataFrame) -> list:
     """Return numeric measurement columns with variance, excluding metadata."""
     cols = []
     for c in df.columns:
-        if any(col in c and col != "id" for col in EXCLUDE_COLS):
+        if c == "id":
             continue
-        if not pd.api.types.is_numeric_dtype(df[c]):
+        elif any(col in c for col in EXCLUDE_COLS):
             continue
-        if df[c].nunique() <= 1:
+        elif not pd.api.types.is_numeric_dtype(df[c]):
+            continue
+        elif df[c].nunique() <= 1:
             continue
         cols.append(c)
     return cols
