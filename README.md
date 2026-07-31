@@ -22,8 +22,8 @@ By comparing the given dataset with the ones seen during the evaluation labs, wh
 
 Due to these criteria, RSS and SSID, which are highly informative in a wireless network, become meaningless in a wired one, since this latter doesn't rely on access points for packets forwarding and interconnection of devices across the network, but rather on routing protocols (such as OSPF and BGP) and on parameters, like TTL and hop count, for traffic analysis purposes.
 
-# Dataset setup
-- Download the dataset at: 10.5281/zenodo.15420422;
+## Dataset setup
+- Download the dataset at: [10.5281/zenodo.15420422;](https://zenodo.org/records/15420422);
 - Rename the zip folder as 'dataset.zip';
 - Locate the renamed folder into a newly defined path within the cloned repository: data/raw;
 
